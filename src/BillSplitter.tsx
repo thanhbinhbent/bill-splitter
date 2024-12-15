@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import ReactDOM from "react-dom/client";
 import React, { useState } from "react";
 import {
   Input,
@@ -23,10 +22,6 @@ import html2canvas from "html2canvas";
 
 const { TextArea } = Input;
 const { Option } = Select;
-
-interface InformationInput extends Bill {
-  participant: string;
-}
 
 interface Bill {
   id: string;
@@ -183,8 +178,6 @@ const BillSplitter: React.FC = () => {
           ? bill.sharedBy.split(", ").map((item: string) => item.trim())
           : [],
       }));
-
-      const importedBillsCount = modifiedBills.length;
 
       setBillInputs(modifiedBills.map((bill) => bill.id));
 
