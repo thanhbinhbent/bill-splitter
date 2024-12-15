@@ -43,6 +43,13 @@ interface PaymentDetails {
 }
 
 const BillSplitter: React.FC = () => {
+  // Initial states
+  const initialParticipants: string[] = [];
+  const initialBills: Bill[] = [];
+  const initialResults: Result[] = [];
+  const initialPayments: PaymentDetails[] = [];
+  const initialBillInputs: string[] = [uuidv4()];
+
   const [participants, setParticipants] = useState<string[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [results, setResults] = useState<Result[]>([]);
@@ -78,9 +85,10 @@ const BillSplitter: React.FC = () => {
       sharedBy: values[`sharedBy${id}`],
     }));
     setBills(newBills);
+    calculateResults(newBills);
   };
 
-  const calculateResults = () => {
+  const calculateResults = (bills: Bill[]) => {
     const balances: { [key: string]: number } = {};
     participants.forEach((name) => (balances[name] = 0));
 
@@ -217,6 +225,15 @@ const BillSplitter: React.FC = () => {
     reader.readAsBinaryString(file);
   };
 
+  const resetAll = () => {
+    setParticipants(initialParticipants);
+    setBills(initialBills);
+    setResults(initialResults);
+    setPayments(initialPayments);
+    setBillInputs(initialBillInputs);
+    form.resetFields();
+    participantForm.resetFields();
+  };
   const columns: ColumnsType<Result> = [
     { title: "Tên", dataIndex: "name", key: "name" },
     {
@@ -245,6 +262,7 @@ const BillSplitter: React.FC = () => {
       <div style="padding: 40px; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); margin: 20px;">
         <div style="text-align: center; font-size: 24px; font-weight: bold; padding-bottom: 20px; color: #1890ff;">
           Chi tiết Hóa Đơn
+          <p>Downloaded from https://thanhbinhbent.github.io/bill-splitter</p>
         </div>
         
         <!-- Số tiền cần trả / nhận lại -->
@@ -327,7 +345,7 @@ const BillSplitter: React.FC = () => {
                   (bill) => `
                     <tr>
                       <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${
-                        bill.billName
+                        bill.billName ?? "Hoá đơn không tên"
                       }</td>
                       <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9; text-align: right;">${formatCurrency(
                         bill.amount
@@ -385,17 +403,6 @@ const BillSplitter: React.FC = () => {
             style={{ width: "24px", height: "24px", marginLeft: "20px" }}
           />
         </a>
-        <a
-          href="https://www.linkedin.com/in/thanhbinhbent/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img
-            src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/81/LinkedIn_icon.svg/108px-LinkedIn_icon.svg.png"
-            alt="LinkedIn"
-            style={{ width: "24px", height: "24px", marginLeft: "20px" }}
-          />
-        </a>
       </h1>
       <div
         style={{
@@ -434,7 +441,7 @@ const BillSplitter: React.FC = () => {
         <Button onClick={exportToExcel} type="default">
           {" "}
           <ArrowDownload48Filled width={"18px"} />
-          Xuất sao lưu
+          Sao lưu
         </Button>
         <Button onClick={exportToImage} type="default">
           <img
@@ -471,7 +478,7 @@ const BillSplitter: React.FC = () => {
               <div key={id} style={{ marginBottom: "20px", width: "100%" }}>
                 <Flex style={{ width: "100%", gap: 20 }}>
                   <Form.Item label="Tên hoá đơn" name={`billName${id}`}>
-                    <Input type="text"></Input>
+                    <Input type="text" defaultValue={""}></Input>
                   </Form.Item>
                   <Form.Item
                     label="Tổng số tiền"
@@ -552,18 +559,17 @@ const BillSplitter: React.FC = () => {
             </Button>
             <div style={{ marginTop: "20px" }}>
               <Button
-                variant="outlined"
-                htmlType="submit"
-                style={{ marginTop: "10px" }}
-              >
-                <b>Bước 1: </b>Lưu Hóa Đơn
-              </Button>
-              <Button
                 type="primary"
-                onClick={calculateResults}
+                htmlType="submit"
                 style={{ marginBottom: "10px", marginLeft: "10px" }}
               >
-                <b>Bước 2: </b>Tính Kết Quả
+                Tính Kết Quả
+              </Button>
+              <Button
+                onClick={resetAll}
+                style={{ marginBottom: "10px", marginLeft: "10px" }}
+              >
+                Tính mới
               </Button>
             </div>
           </Form>
