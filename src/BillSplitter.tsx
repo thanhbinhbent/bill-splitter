@@ -7,7 +7,6 @@ import {
   Button,
   Table,
   Select,
-  Space,
   Flex,
   InputNumber,
   Row,
@@ -162,7 +161,7 @@ const BillSplitter: React.FC = () => {
       <h1 style={{ textAlign: "center", marginBottom: 50 }}>
         Công Cụ Chia Tiền Hóa Đơn
         <a
-          href="https://github.com/yourusername"
+          href="https://github.com/thanhbinhbent/bill-splitter"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -173,7 +172,7 @@ const BillSplitter: React.FC = () => {
           />
         </a>
         <a
-          href="https://www.linkedin.com/in/yourusername"
+          href="https://www.linkedin.com/in/thanhbinhbent/"
           target="_blank"
           rel="noopener noreferrer"
         >
