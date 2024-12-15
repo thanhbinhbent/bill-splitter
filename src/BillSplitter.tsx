@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import ReactDOM from "react-dom/client";
 import React, { useState } from "react";
 import {
   Input,
@@ -9,17 +10,27 @@ import {
   Select,
   Flex,
   InputNumber,
+  Divider,
   Row,
   Col,
 } from "antd";
+import { v4 as uuidv4 } from "uuid";
 import "antd/dist/reset.css";
 import { ColumnsType } from "antd/es/table";
+import { ArrowDownload48Filled } from "./assets/DownloadIcon";
+import * as XLSX from "xlsx";
+import html2canvas from "html2canvas";
 
 const { TextArea } = Input;
 const { Option } = Select;
 
+interface InformationInput extends Bill {
+  participant: string;
+}
+
 interface Bill {
-  id: number;
+  id: string;
+  billName: string;
   amount: number;
   paidBy: string;
   sharedBy: string[];
@@ -41,9 +52,10 @@ const BillSplitter: React.FC = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [results, setResults] = useState<Result[]>([]);
   const [payments, setPayments] = useState<PaymentDetails[]>([]);
-  const [billInputs, setBillInputs] = useState<number[]>([0]);
+  const [billInputs, setBillInputs] = useState<string[]>([uuidv4()]);
 
   const [form] = Form.useForm();
+  const [participantForm] = Form.useForm();
 
   const handleParticipantsChange = (value: string) => {
     const list = value.split("\n").filter((name) => name.trim() !== "");
@@ -51,24 +63,24 @@ const BillSplitter: React.FC = () => {
   };
 
   const addBillInput = () => {
-    setBillInputs([...billInputs, billInputs.length]);
+    setBillInputs([...billInputs, uuidv4()]);
   };
 
-  const removeBillInput = (index: number) => {
-    const updatedInputs = billInputs.filter((_, i) => i !== index);
+  const removeBillInput = (id: string) => {
+    const updatedInputs = billInputs.filter((inputId) => inputId !== id);
     setBillInputs(updatedInputs);
 
-    // Remove the corresponding bill from the bills state
-    const updatedBills = bills.filter((_, i) => i !== index);
+    const updatedBills = bills.filter((bill) => bill.id !== id);
     setBills(updatedBills);
   };
 
   const handleBillSubmit = (values: any) => {
-    const newBills: Bill[] = billInputs.map((_, index) => ({
-      id: index,
-      amount: values[`amount${index}`],
-      paidBy: values[`paidBy${index}`],
-      sharedBy: values[`sharedBy${index}`],
+    const newBills: Bill[] = billInputs.map((id) => ({
+      id,
+      billName: values[`billName${id}`],
+      amount: values[`amount${id}`],
+      paidBy: values[`paidBy${id}`],
+      sharedBy: values[`sharedBy${id}`],
     }));
     setBills(newBills);
   };
@@ -77,7 +89,6 @@ const BillSplitter: React.FC = () => {
     const balances: { [key: string]: number } = {};
     participants.forEach((name) => (balances[name] = 0));
 
-    // Ensure that each bill's sharedBy property is not undefined before accessing it
     bills.forEach((bill) => {
       if (bill.sharedBy && bill.sharedBy.length > 0) {
         const share = bill.amount / bill.sharedBy.length;
@@ -135,6 +146,84 @@ const BillSplitter: React.FC = () => {
       currency: "VND",
     }).format(value);
 
+  const exportToExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    const modifiedBills = bills.map((bill) => ({
+      ...bill,
+      sharedBy: bill.sharedBy.join(", "),
+    }));
+
+    const billsSheet = XLSX.utils.json_to_sheet(modifiedBills);
+    XLSX.utils.book_append_sheet(wb, billsSheet, "Bills");
+
+    const resultsSheet = XLSX.utils.json_to_sheet(results);
+    XLSX.utils.book_append_sheet(wb, resultsSheet, "Results");
+
+    const paymentsSheet = XLSX.utils.json_to_sheet(payments);
+    XLSX.utils.book_append_sheet(wb, paymentsSheet, "Payments");
+
+    XLSX.writeFile(wb, "BillSplitterByThanhBinhBent.xlsx");
+  };
+
+  const importFromExcel = (file: File) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      const data = e.target?.result;
+      const wb = XLSX.read(data, { type: "binary" });
+
+      const billsSheet = wb.Sheets["Bills"];
+      const billsData = XLSX.utils.sheet_to_json(billsSheet);
+
+      const modifiedBills = billsData.map((bill: any) => ({
+        ...bill,
+        id: bill.id || uuidv4(),
+        sharedBy: bill.sharedBy
+          ? bill.sharedBy.split(", ").map((item: string) => item.trim())
+          : [],
+      }));
+
+      const importedBillsCount = modifiedBills.length;
+
+      setBillInputs(modifiedBills.map((bill) => bill.id));
+
+      setBills(modifiedBills);
+
+      const importedParticipants = modifiedBills.flatMap((bill) => [
+        bill.paidBy,
+        ...bill.sharedBy,
+      ]);
+      const uniqueParticipants = Array.from(new Set(importedParticipants));
+      setParticipants(uniqueParticipants);
+
+      modifiedBills.forEach((bill) => {
+        form.setFieldsValue({
+          [`billName${bill.id}`]: bill.billName,
+          [`amount${bill.id}`]: bill.amount,
+          [`paidBy${bill.id}`]: bill.paidBy,
+          [`sharedBy${bill.id}`]: bill.sharedBy,
+        });
+      });
+
+      const resultsSheet = wb.Sheets["Results"];
+      const resultsData = XLSX.utils.sheet_to_json(resultsSheet);
+      setResults(resultsData as Result[]);
+
+      participantForm.setFieldsValue({
+        participantList: resultsData
+          .flatMap((result: any) => [result.name])
+          .join("\n"),
+      });
+
+      const paymentsSheet = wb.Sheets["Payments"];
+      const paymentsData = XLSX.utils.sheet_to_json(paymentsSheet);
+      setPayments(paymentsData as PaymentDetails[]);
+    };
+
+    reader.readAsBinaryString(file);
+  };
+
   const columns: ColumnsType<Result> = [
     { title: "Tên", dataIndex: "name", key: "name" },
     {
@@ -156,9 +245,141 @@ const BillSplitter: React.FC = () => {
     },
   ];
 
+  const exportToImage = () => {
+    const contentToExport = document.createElement("div");
+
+    contentToExport.innerHTML = `
+      <div style="padding: 40px; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); margin: 20px;">
+        <div style="text-align: center; font-size: 24px; font-weight: bold; padding-bottom: 20px; color: #1890ff;">
+          Chi tiết Hóa Đơn
+        </div>
+        
+        <!-- Số tiền cần trả / nhận lại -->
+        <div style="margin-bottom: 20px;">
+          <h3 style="font-size: 20px; color: #1890ff;; margin-bottom: 10px;">Số tiền cần trả (+) / nhận lại (-)</h3>
+          <table style="border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Tên</th>
+                <th style="font-size: 18px; color: #555; padding: 8px; text-align: right;">Số Tiền</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${results
+                .map(
+                  (result) => `
+                    <tr>
+                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${
+                        result.name
+                      }</td>
+                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9; text-align: right;">${formatCurrency(
+                        result.balance
+                      )}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+  
+        <!-- Danh sách trả tiền -->
+        <div style="margin-bottom: 20px;">
+          <h3 style="font-size: 20px; color: #1890ff; margin-bottom: 10px;">Danh sách trả tiền</h3>
+          <table border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Người trả</th>
+                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Số Tiền</th>
+                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Trả cho</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${payments
+                .map(
+                  (payment) => `
+                    <tr>
+                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${
+                        payment.from
+                      }</td>
+                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9; text-align: right;">${formatCurrency(
+                        payment.amount
+                      )}</td>
+                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${
+                        payment.to
+                      }</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+  
+        <!-- Hóa Đơn Chi Tiết -->
+        <div>
+          <h3 style="font-size: 20px;color: #1890ff; margin-bottom: 10px;">Hóa Đơn Chi Tiết</h3>
+          <table style=" border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Tên hóa đơn</th>
+                <th style="font-size: 18px; color: #555; padding: 8px; text-align: right;">Số tiền</th>
+                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Người thanh toán trước</th>
+                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Người tham gia chia hoá đơn</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${bills
+                .map(
+                  (bill) => `
+                    <tr>
+                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${
+                        bill.billName
+                      }</td>
+                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9; text-align: right;">${formatCurrency(
+                        bill.amount
+                      )}</td>
+                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${
+                        bill.paidBy
+                      }</td>
+                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${bill.sharedBy.join(
+                        ", "
+                      )}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(contentToExport);
+
+    html2canvas(contentToExport, {
+      allowTaint: true,
+      useCORS: true,
+    })
+      .then((canvas) => {
+        const link = document.createElement("a");
+        link.href = canvas.toDataURL("image/png");
+        link.download = "ChiTietHoaDon.png";
+
+        link.click();
+      })
+      .catch((error) => {
+        console.error("Lỗi khi xuất sang hình ảnh:", error);
+        alert("Đã xảy ra lỗi khi xuất hình ảnh. Vui lòng thử lại.");
+      })
+      .finally(() => {
+        document.body.removeChild(contentToExport);
+      });
+  };
+
   return (
-    <div style={{ padding: "100px", width: "100%" }}>
-      <h1 style={{ textAlign: "center", marginBottom: 50 }}>
+    <div style={{ padding: "100px", width: "100%", paddingTop: 40 }}>
+      <h1 style={{ textAlign: "center" }}>
         Công Cụ Chia Tiền Hóa Đơn
         <a
           href="https://github.com/thanhbinhbent/bill-splitter"
@@ -183,32 +404,85 @@ const BillSplitter: React.FC = () => {
           />
         </a>
       </h1>
+      <div
+        style={{
+          display: "flex",
+          textAlign: "center",
+          marginBottom: 20,
+          gap: 10,
+          justifyContent: "center",
+        }}
+      >
+        <div>
+          {" "}
+          <Button
+            type="default"
+            onClick={() => document.getElementById("importFileInput")?.click()}
+          >
+            <img
+              width={15}
+              src="https://upload.wikimedia.org/wikipedia/commons/3/34/Microsoft_Office_Excel_%282019%E2%80%93present%29.svg"
+              alt="Nhập file excel/csv"
+            />
+            Nhập dữ liệu
+          </Button>
+          <input
+            id="importFileInput"
+            type="file"
+            style={{ display: "none" }}
+            accept=".xlsx,.xls"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) importFromExcel(file);
+            }}
+          />
+        </div>
 
+        <Button onClick={exportToExcel} type="default">
+          {" "}
+          <ArrowDownload48Filled width={"18px"} />
+          Xuất sao lưu
+        </Button>
+        <Button onClick={exportToImage} type="default">
+          <img
+            width={15}
+            src="https://img.icons8.com/?size=100&id=QdAGIsBAJMG7&format=png&color=000000"
+            alt="Xuất hình ảnh"
+          />
+          Xuất hình ảnh
+        </Button>
+      </div>
+      <Divider />
       <Row gutter={[50, 30]}>
         {/* Cột người tham gia */}
-        <Col span={8}>
-          <Form layout="vertical">
+        <Col span={6}>
+          <Form layout="vertical" form={participantForm}>
             <Form.Item
-              label={<h3>Nhập danh sách người tham gia (mỗi dòng 1 người):</h3>}
+              name={`participantList`}
+              label={<h3>Người tham gia chia:</h3>}
             >
               <TextArea
                 rows={6}
+                placeholder={`Bình\nHưng\nHướng\nHào\n...`}
                 onChange={(e) => handleParticipantsChange(e.target.value)}
+                style={{ whiteSpace: "pre-line" }}
               />
             </Form.Item>
           </Form>
         </Col>
 
-        {/* Cột thêm hóa đơn */}
-        <Col span={16}>
+        <Col span={18}>
           <Form form={form} onFinish={handleBillSubmit} layout="vertical">
             <h3>Thêm Hóa Đơn:</h3>
-            {billInputs.map((index) => (
-              <div key={index} style={{ marginBottom: "20px", width: "100%" }}>
+            {billInputs.map((id) => (
+              <div key={id} style={{ marginBottom: "20px", width: "100%" }}>
                 <Flex style={{ width: "100%", gap: 20 }}>
+                  <Form.Item label="Tên hoá đơn" name={`billName${id}`}>
+                    <Input type="text"></Input>
+                  </Form.Item>
                   <Form.Item
                     label="Tổng số tiền"
-                    name={`amount${index}`}
+                    name={`amount${id}`}
                     rules={[
                       { required: true, message: "Vui lòng nhập số tiền!" },
                     ]}
@@ -228,12 +502,16 @@ const BillSplitter: React.FC = () => {
 
                   <Form.Item
                     label="Người thanh toán"
-                    name={`paidBy${index}`}
+                    name={`paidBy${id}`}
                     rules={[
                       { required: true, message: "Chọn người thanh toán!" },
                     ]}
                   >
-                    <Select placeholder="Chọn người" style={{ width: "150px" }}>
+                    <Select
+                      placeholder="Chọn người"
+                      style={{ width: "150px" }}
+                      notFoundContent="Chưa có dữ liệu!"
+                    >
                       {participants.map((name) => (
                         <Option key={name} value={name}>
                           {name}
@@ -243,8 +521,8 @@ const BillSplitter: React.FC = () => {
                   </Form.Item>
 
                   <Form.Item
-                    label="Người cùng chia"
-                    name={`sharedBy${index}`}
+                    label="Người chia hoá đơn này"
+                    name={`sharedBy${id}`}
                     style={{ flex: 1 }}
                     rules={[
                       { required: true, message: "Chọn người cùng chia!" },
@@ -254,6 +532,7 @@ const BillSplitter: React.FC = () => {
                       mode="multiple"
                       placeholder="Chọn người"
                       style={{ width: "100%" }}
+                      notFoundContent="Chưa có dữ liệu!"
                     >
                       {participants.map((name) => (
                         <Option key={name} value={name}>
@@ -264,7 +543,7 @@ const BillSplitter: React.FC = () => {
                   </Form.Item>
 
                   <Form.Item label=" ">
-                    <Button danger onClick={() => removeBillInput(index)}>
+                    <Button danger onClick={() => removeBillInput(id)}>
                       Xóa
                     </Button>
                   </Form.Item>
@@ -299,7 +578,7 @@ const BillSplitter: React.FC = () => {
       </Row>
 
       {/* Kết quả */}
-      <div style={{ marginTop: "20px" }}>
+      <div style={{ marginTop: "20px" }} id="summaryContent">
         <h3 style={{ marginTop: "20px" }}>Tóm tắt:</h3>
         <Table
           dataSource={results}
