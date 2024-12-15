@@ -7,7 +7,7 @@ import {
   Button,
   Table,
   Select,
-  Flex,
+  Grid,
   InputNumber,
   Divider,
   Row,
@@ -387,215 +387,247 @@ const BillSplitter: React.FC = () => {
         document.body.removeChild(contentToExport);
       });
   };
+  const screens = Grid.useBreakpoint(); // Ant Design breakpoint hook
 
+  // Dynamically set padding based on screen size
+  const getPadding = () => {
+    if (screens.xs) return "20px"; // Mobile devices
+    if (screens.sm) return "60px"; // Tablets
+    if (screens.md) return "100px"; // Desktop
+    return "10px"; // Default fallback
+  };
   return (
-    <div style={{ padding: "100px", width: "100%", paddingTop: 40 }}>
-      <h1 style={{ textAlign: "center" }}>
-        Công Cụ Chia Tiền Hóa Đơn
-        <a
-          href="https://github.com/thanhbinhbent/bill-splitter"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img
-            src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Octicons-mark-github.svg/900px-Octicons-mark-github.svg.png"
-            alt="GitHub"
-            style={{ width: "24px", height: "24px", marginLeft: "20px" }}
-          />
-        </a>
-      </h1>
-      <div
+    <Row
+      style={{
+        padding: getPadding(), // Apply dynamic padding
+        paddingTop: "40px",
+        width: "100%",
+      }}
+    >
+      <Col
         style={{
-          display: "flex",
-          textAlign: "center",
-          marginBottom: 20,
-          gap: 10,
-          justifyContent: "center",
+          width: "100%",
         }}
       >
-        <div>
-          {" "}
-          <Button
-            type="default"
-            onClick={() => document.getElementById("importFileInput")?.click()}
+        {" "}
+        <h1 style={{ textAlign: "center" }}>
+          Công Cụ Chia Tiền Hóa Đơn
+          <a
+            href="https://github.com/thanhbinhbent/bill-splitter"
+            target="_blank"
+            rel="noopener noreferrer"
           >
             <img
-              width={15}
-              src="https://upload.wikimedia.org/wikipedia/commons/3/34/Microsoft_Office_Excel_%282019%E2%80%93present%29.svg"
-              alt="Nhập file excel/csv"
+              src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Octicons-mark-github.svg/900px-Octicons-mark-github.svg.png"
+              alt="GitHub"
+              style={{ width: "24px", height: "24px", marginLeft: "20px" }}
             />
-            Nhập dữ liệu
+          </a>
+        </h1>
+        <div
+          style={{
+            flexWrap: "wrap",
+            display: "flex",
+            textAlign: "center",
+            marginBottom: 20,
+            gap: 10,
+            justifyContent: "center",
+          }}
+        >
+          <div>
+            {" "}
+            <Button
+              type="default"
+              onClick={() =>
+                document.getElementById("importFileInput")?.click()
+              }
+            >
+              <img
+                width={15}
+                src="https://upload.wikimedia.org/wikipedia/commons/3/34/Microsoft_Office_Excel_%282019%E2%80%93present%29.svg"
+                alt="Nhập file excel/csv"
+              />
+              Nhập dữ liệu
+            </Button>
+            <input
+              id="importFileInput"
+              type="file"
+              style={{ display: "none" }}
+              accept=".xlsx,.xls"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) importFromExcel(file);
+              }}
+            />
+          </div>
+
+          <Button onClick={exportToExcel} type="default">
+            {" "}
+            <ArrowDownload48Filled width={"18px"} />
+            Sao lưu
           </Button>
-          <input
-            id="importFileInput"
-            type="file"
-            style={{ display: "none" }}
-            accept=".xlsx,.xls"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) importFromExcel(file);
-            }}
+          <Button onClick={exportToImage} type="default">
+            <img
+              width={15}
+              src="https://img.icons8.com/?size=100&id=QdAGIsBAJMG7&format=png&color=000000"
+              alt="Xuất hình ảnh"
+            />
+            Xuất hình ảnh
+          </Button>
+        </div>
+        <Divider />
+        <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 32 }} wrap>
+          {/* Cột người tham gia */}
+          <Col xs={24} sm={24} md={6}>
+            <Form layout="vertical" form={participantForm}>
+              <Form.Item
+                name={`participantList`}
+                label={<h3>Người tham gia chia:</h3>}
+              >
+                <TextArea
+                  rows={6}
+                  placeholder={`Bình\nHưng\nHướng\nHào\n...`}
+                  onChange={(e) => handleParticipantsChange(e.target.value)}
+                  style={{ whiteSpace: "pre-line" }}
+                />
+              </Form.Item>
+            </Form>
+          </Col>
+
+          <Col xs={24} sm={24} md={18}>
+            <Form form={form} onFinish={handleBillSubmit} layout="vertical">
+              <h3>Thêm Hóa Đơn:</h3>
+              {billInputs.map((id) => (
+                <div key={id} style={{ marginBottom: "20px", width: "100%" }}>
+                  <Row gutter={16}>
+                    <Col xs={24} sm={12} md={4}>
+                      <Form.Item label="Tên hoá đơn" name={`billName${id}`}>
+                        <Input type="text" defaultValue={""}></Input>
+                      </Form.Item>
+                    </Col>
+
+                    <Col xs={24} sm={12} md={6}>
+                      <Form.Item
+                        label="Tổng số tiền"
+                        name={`amount${id}`}
+                        rules={[
+                          { required: true, message: "Vui lòng nhập số tiền!" },
+                        ]}
+                      >
+                        <InputNumber<number>
+                          min={1}
+                          formatter={(value) =>
+                            `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+                          }
+                          parser={(value) =>
+                            Number(value?.replace(/[^\d]/g, "") || 0)
+                          }
+                          prefix="VND"
+                          style={{ width: "100%" }}
+                        />
+                      </Form.Item>
+                    </Col>
+
+                    <Col xs={24} sm={12} md={6}>
+                      <Form.Item
+                        label="Người thanh toán"
+                        name={`paidBy${id}`}
+                        rules={[
+                          { required: true, message: "Chọn người thanh toán!" },
+                        ]}
+                      >
+                        <Select
+                          placeholder="Chọn người"
+                          style={{ width: "100%" }}
+                          notFoundContent="Chưa có dữ liệu!"
+                        >
+                          {participants.map((name) => (
+                            <Option key={name} value={name}>
+                              {name}
+                            </Option>
+                          ))}
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                      <Form.Item
+                        label="Người chia hoá đơn này"
+                        name={`sharedBy${id}`}
+                        style={{ flex: 1 }}
+                        rules={[
+                          { required: true, message: "Chọn người cùng chia!" },
+                        ]}
+                      >
+                        <Select
+                          mode="multiple"
+                          placeholder="Chọn người"
+                          style={{ width: "100%" }}
+                          notFoundContent="Chưa có dữ liệu!"
+                        >
+                          {participants.map((name) => (
+                            <Option key={name} value={name}>
+                              {name}
+                            </Option>
+                          ))}
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col xs={24} sm={12} md={2}>
+                      <Form.Item label=" ">
+                        <Button danger onClick={() => removeBillInput(id)}>
+                          Xóa
+                        </Button>
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </div>
+              ))}
+              <Button
+                type="dashed"
+                onClick={addBillInput}
+                style={{ width: "100%" }}
+              >
+                Thêm Hóa Đơn
+              </Button>
+              <div style={{ marginTop: "20px" }}>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  style={{ marginBottom: "10px", marginLeft: "10px" }}
+                >
+                  Tính Kết Quả
+                </Button>
+                <Button
+                  onClick={resetAll}
+                  style={{ marginBottom: "10px", marginLeft: "10px" }}
+                >
+                  Tính mới
+                </Button>
+              </div>
+            </Form>
+          </Col>
+        </Row>
+        {/* Kết quả */}
+        <div style={{ marginTop: "20px" }} id="summaryContent">
+          <h3 style={{ marginTop: "20px" }}>Tóm tắt:</h3>
+          <Table
+            dataSource={results}
+            columns={columns}
+            rowKey="name"
+            locale={{ emptyText: "Chưa có dữ liệu" }}
+            pagination={false}
+          />
+          <h3 style={{ marginTop: "20px" }}>Ai cần trả cho ai bao nhiêu:</h3>
+          <Table
+            dataSource={payments}
+            columns={paymentColumns}
+            locale={{ emptyText: "Chưa có dữ liệu" }}
+            rowKey={(record) => `${record.from}-${record.to}`}
+            pagination={false}
           />
         </div>
-
-        <Button onClick={exportToExcel} type="default">
-          {" "}
-          <ArrowDownload48Filled width={"18px"} />
-          Sao lưu
-        </Button>
-        <Button onClick={exportToImage} type="default">
-          <img
-            width={15}
-            src="https://img.icons8.com/?size=100&id=QdAGIsBAJMG7&format=png&color=000000"
-            alt="Xuất hình ảnh"
-          />
-          Xuất hình ảnh
-        </Button>
-      </div>
-      <Divider />
-      <Row gutter={[50, 30]}>
-        {/* Cột người tham gia */}
-        <Col span={6}>
-          <Form layout="vertical" form={participantForm}>
-            <Form.Item
-              name={`participantList`}
-              label={<h3>Người tham gia chia:</h3>}
-            >
-              <TextArea
-                rows={6}
-                placeholder={`Bình\nHưng\nHướng\nHào\n...`}
-                onChange={(e) => handleParticipantsChange(e.target.value)}
-                style={{ whiteSpace: "pre-line" }}
-              />
-            </Form.Item>
-          </Form>
-        </Col>
-
-        <Col span={18}>
-          <Form form={form} onFinish={handleBillSubmit} layout="vertical">
-            <h3>Thêm Hóa Đơn:</h3>
-            {billInputs.map((id) => (
-              <div key={id} style={{ marginBottom: "20px", width: "100%" }}>
-                <Flex style={{ width: "100%", gap: 20 }}>
-                  <Form.Item label="Tên hoá đơn" name={`billName${id}`}>
-                    <Input type="text" defaultValue={""}></Input>
-                  </Form.Item>
-                  <Form.Item
-                    label="Tổng số tiền"
-                    name={`amount${id}`}
-                    rules={[
-                      { required: true, message: "Vui lòng nhập số tiền!" },
-                    ]}
-                  >
-                    <InputNumber<number>
-                      min={1}
-                      formatter={(value) =>
-                        `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-                      }
-                      parser={(value) =>
-                        Number(value?.replace(/[^\d]/g, "") || 0)
-                      }
-                      prefix="VND"
-                      style={{ width: "200px" }}
-                    />
-                  </Form.Item>
-
-                  <Form.Item
-                    label="Người thanh toán"
-                    name={`paidBy${id}`}
-                    rules={[
-                      { required: true, message: "Chọn người thanh toán!" },
-                    ]}
-                  >
-                    <Select
-                      placeholder="Chọn người"
-                      style={{ width: "150px" }}
-                      notFoundContent="Chưa có dữ liệu!"
-                    >
-                      {participants.map((name) => (
-                        <Option key={name} value={name}>
-                          {name}
-                        </Option>
-                      ))}
-                    </Select>
-                  </Form.Item>
-
-                  <Form.Item
-                    label="Người chia hoá đơn này"
-                    name={`sharedBy${id}`}
-                    style={{ flex: 1 }}
-                    rules={[
-                      { required: true, message: "Chọn người cùng chia!" },
-                    ]}
-                  >
-                    <Select
-                      mode="multiple"
-                      placeholder="Chọn người"
-                      style={{ width: "100%" }}
-                      notFoundContent="Chưa có dữ liệu!"
-                    >
-                      {participants.map((name) => (
-                        <Option key={name} value={name}>
-                          {name}
-                        </Option>
-                      ))}
-                    </Select>
-                  </Form.Item>
-
-                  <Form.Item label=" ">
-                    <Button danger onClick={() => removeBillInput(id)}>
-                      Xóa
-                    </Button>
-                  </Form.Item>
-                </Flex>
-              </div>
-            ))}
-            <Button
-              type="dashed"
-              onClick={addBillInput}
-              style={{ width: "100%" }}
-            >
-              Thêm Hóa Đơn
-            </Button>
-            <div style={{ marginTop: "20px" }}>
-              <Button
-                type="primary"
-                htmlType="submit"
-                style={{ marginBottom: "10px", marginLeft: "10px" }}
-              >
-                Tính Kết Quả
-              </Button>
-              <Button
-                onClick={resetAll}
-                style={{ marginBottom: "10px", marginLeft: "10px" }}
-              >
-                Tính mới
-              </Button>
-            </div>
-          </Form>
-        </Col>
-      </Row>
-
-      {/* Kết quả */}
-      <div style={{ marginTop: "20px" }} id="summaryContent">
-        <h3 style={{ marginTop: "20px" }}>Tóm tắt:</h3>
-        <Table
-          dataSource={results}
-          columns={columns}
-          rowKey="name"
-          locale={{ emptyText: "Chưa có dữ liệu" }}
-          pagination={false}
-        />
-        <h3 style={{ marginTop: "20px" }}>Ai cần trả cho ai bao nhiêu:</h3>
-        <Table
-          dataSource={payments}
-          columns={paymentColumns}
-          locale={{ emptyText: "Chưa có dữ liệu" }}
-          rowKey={(record) => `${record.from}-${record.to}`}
-          pagination={false}
-        />
-      </div>
-    </div>
+      </Col>
+    </Row>
   );
 };
 
