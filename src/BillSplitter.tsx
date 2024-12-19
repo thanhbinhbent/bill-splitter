@@ -18,7 +18,6 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import "antd/dist/reset.css";
 import { ColumnsType } from "antd/es/table";
-import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import {
   Participant,
@@ -61,62 +60,6 @@ const BillSplitter: React.FC = () => {
   const columns: ColumnsType<Result> = resultColumns;
 
   const paymentColumns: ColumnsType<PaymentDetails> = paymentColumnsHelper;
-
-  const importFromExcel = (file: File) => {
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      const data = e.target?.result;
-      const wb = XLSX.read(data, { type: "binary" });
-
-      const billsSheet = wb.Sheets["Bills"];
-      const billsData = XLSX.utils.sheet_to_json(billsSheet);
-
-      const modifiedBills = billsData.map((bill: any) => ({
-        ...bill,
-        id: bill.id || uuidv4(),
-        sharedBy: bill.sharedBy
-          ? bill.sharedBy.split(", ").map((item: string) => item.trim())
-          : [],
-      }));
-
-      setBillInputs(modifiedBills.map((bill) => bill.id));
-
-      setBills(modifiedBills);
-
-      const importedParticipants = modifiedBills.flatMap((bill) => [
-        bill.paidBy,
-        ...bill.sharedBy,
-      ]);
-      const uniqueParticipants = Array.from(new Set(importedParticipants));
-      setParticipants(uniqueParticipants);
-
-      modifiedBills.forEach((bill) => {
-        form.setFieldsValue({
-          [`billName${bill.id}`]: bill.billName,
-          [`amount${bill.id}`]: bill.amount,
-          [`paidBy${bill.id}`]: bill.paidBy,
-          [`sharedBy${bill.id}`]: bill.sharedBy,
-        });
-      });
-
-      const resultsSheet = wb.Sheets["Results"];
-      const resultsData = XLSX.utils.sheet_to_json(resultsSheet);
-      setResults(resultsData as Result[]);
-
-      participantForm.setFieldsValue({
-        participantList: resultsData
-          .flatMap((result: any) => [result.name])
-          .join("\n"),
-      });
-
-      const paymentsSheet = wb.Sheets["Payments"];
-      const paymentsData = XLSX.utils.sheet_to_json(paymentsSheet);
-      setPayments(paymentsData as PaymentDetails[]);
-    };
-
-    reader.readAsBinaryString(file);
-  };
 
   const importFromJson = (file: File) => {
     const reader = new FileReader();
