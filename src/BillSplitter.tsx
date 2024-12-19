@@ -5,6 +5,7 @@ import {
   Input,
   Form,
   Button,
+  Tooltip,
   Table,
   Select,
   Grid,
@@ -12,45 +13,43 @@ import {
   Divider,
   Row,
   Col,
+  notification,
 } from "antd";
 import { v4 as uuidv4 } from "uuid";
 import "antd/dist/reset.css";
 import { ColumnsType } from "antd/es/table";
-import { ArrowDownload48Filled } from "./assets/DownloadIcon";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
-
+import {
+  Participant,
+  paymentColumns as paymentColumnsHelper,
+  Result,
+  resultColumns,
+  Bill,
+  PaymentDetails,
+} from "./utils/types";
+import {
+  calculateResults,
+  formatCurrency,
+  calculatePayments,
+  mapPaymentDetails,
+  getParticipantNameById,
+} from "./utils/helpers";
+import { firebaseService } from "./services/firebaseService";
 const { TextArea } = Input;
 const { Option } = Select;
 
-interface Bill {
-  id: string;
-  billName: string;
-  amount: number;
-  paidBy: string;
-  sharedBy: string[];
-}
-
-interface Result {
-  name: string;
-  balance: number;
-}
-
-interface PaymentDetails {
-  from: string;
-  to: string;
-  amount: number;
-}
-
 const BillSplitter: React.FC = () => {
-  // Initial states
-  const initialParticipants: string[] = [];
+  const initialParticipants: Participant[] = [];
   const initialBills: Bill[] = [];
   const initialResults: Result[] = [];
   const initialPayments: PaymentDetails[] = [];
   const initialBillInputs: string[] = [uuidv4()];
 
-  const [participants, setParticipants] = useState<string[]>([]);
+  const [sessionLink, setSessionLink] = useState<string | null>(null);
+  const [isCalculated, setIsCalculated] = useState(false);
+
+  const [participants, setParticipants] = useState<Participant[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [results, setResults] = useState<Result[]>([]);
   const [payments, setPayments] = useState<PaymentDetails[]>([]);
@@ -59,115 +58,9 @@ const BillSplitter: React.FC = () => {
   const [form] = Form.useForm();
   const [participantForm] = Form.useForm();
 
-  const handleParticipantsChange = (value: string) => {
-    const list = value.split("\n").filter((name) => name.trim() !== "");
-    setParticipants(list);
-  };
+  const columns: ColumnsType<Result> = resultColumns;
 
-  const addBillInput = () => {
-    setBillInputs([...billInputs, uuidv4()]);
-  };
-
-  const removeBillInput = (id: string) => {
-    const updatedInputs = billInputs.filter((inputId) => inputId !== id);
-    setBillInputs(updatedInputs);
-
-    const updatedBills = bills.filter((bill) => bill.id !== id);
-    setBills(updatedBills);
-  };
-
-  const handleBillSubmit = (values: any) => {
-    const newBills: Bill[] = billInputs.map((id) => ({
-      id,
-      billName: values[`billName${id}`],
-      amount: values[`amount${id}`],
-      paidBy: values[`paidBy${id}`],
-      sharedBy: values[`sharedBy${id}`],
-    }));
-    setBills(newBills);
-    calculateResults(newBills);
-  };
-
-  const calculateResults = (bills: Bill[]) => {
-    const balances: { [key: string]: number } = {};
-    participants.forEach((name) => (balances[name] = 0));
-
-    bills.forEach((bill) => {
-      if (bill.sharedBy && bill.sharedBy.length > 0) {
-        const share = bill.amount / bill.sharedBy.length;
-        balances[bill.paidBy] -= bill.amount;
-        bill.sharedBy.forEach((person) => {
-          balances[person] += share;
-        });
-      }
-    });
-
-    const resultArray: Result[] = participants.map((name) => ({
-      name,
-      balance: balances[name],
-    }));
-    setResults(resultArray);
-
-    calculatePayments(balances);
-  };
-
-  const calculatePayments = (balances: { [key: string]: number }) => {
-    const creditors = Object.entries(balances)
-      .filter(([_, balance]) => balance < 0)
-      .map(([name, balance]) => ({ name, balance: Math.abs(balance) }));
-
-    const debtors = Object.entries(balances)
-      .filter(([_, balance]) => balance > 0)
-      .map(([name, balance]) => ({ name, balance }));
-
-    const paymentDetails: PaymentDetails[] = [];
-
-    while (debtors.length > 0 && creditors.length > 0) {
-      const debtor = debtors[0];
-      const creditor = creditors[0];
-
-      const payment = Math.min(debtor.balance, creditor.balance);
-      paymentDetails.push({
-        from: debtor.name,
-        to: creditor.name,
-        amount: payment,
-      });
-
-      debtor.balance -= payment;
-      creditor.balance -= payment;
-
-      if (debtor.balance === 0) debtors.shift();
-      if (creditor.balance === 0) creditors.shift();
-    }
-
-    setPayments(paymentDetails);
-  };
-
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(value);
-
-  const exportToExcel = () => {
-    const wb = XLSX.utils.book_new();
-
-    const modifiedBills = bills.map((bill) => ({
-      ...bill,
-      sharedBy: bill.sharedBy.join(", "),
-    }));
-
-    const billsSheet = XLSX.utils.json_to_sheet(modifiedBills);
-    XLSX.utils.book_append_sheet(wb, billsSheet, "Bills");
-
-    const resultsSheet = XLSX.utils.json_to_sheet(results);
-    XLSX.utils.book_append_sheet(wb, resultsSheet, "Results");
-
-    const paymentsSheet = XLSX.utils.json_to_sheet(payments);
-    XLSX.utils.book_append_sheet(wb, paymentsSheet, "Payments");
-
-    XLSX.writeFile(wb, "BillSplitterByThanhBinhBent.xlsx");
-  };
+  const paymentColumns: ColumnsType<PaymentDetails> = paymentColumnsHelper;
 
   const importFromExcel = (file: File) => {
     const reader = new FileReader();
@@ -225,181 +118,352 @@ const BillSplitter: React.FC = () => {
     reader.readAsBinaryString(file);
   };
 
+  const importFromJson = (file: File) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+
+        if (!data.participant || !data.bills) {
+          throw new Error(
+            "Invalid file structure: missing participants or bills"
+          );
+        }
+
+        const importedParticipants = data.participant.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+        }));
+        setParticipants(importedParticipants);
+
+        const importedBills = data.bills.map((bill: Bill) => ({
+          id: bill.id || uuidv4(),
+          billName: bill.billName,
+          amount: bill.amount,
+          paidBy: bill.paidBy,
+          sharedBy: bill.sharedBy || [],
+        }));
+
+        setBillInputs(importedBills.map((bill: Bill) => bill.id));
+        setBills(importedBills);
+
+        importedBills.forEach((bill: Bill) => {
+          form.setFieldsValue({
+            [`billName${bill.id}`]: bill.billName,
+            [`amount${bill.id}`]: bill.amount,
+            [`paidBy${bill.id}`]: bill.paidBy,
+            [`sharedBy${bill.id}`]: bill.sharedBy,
+          });
+        });
+
+        setBillInputs(importedBills.map((bill: Bill) => bill.id));
+
+        setBills(importedBills);
+
+        const { results, balances } = calculateResults(
+          importedParticipants,
+          importedBills
+        );
+        setResults(results);
+        setPayments(
+          mapPaymentDetails(calculatePayments(balances), importedParticipants)
+        );
+
+        participantForm.setFieldsValue({
+          participantList: importedParticipants
+            .map((p: Participant) => p.name)
+            .join("\n"),
+        });
+
+        console.log("JSON file imported successfully");
+      } catch (error) {
+        console.error("Error importing JSON file:", error);
+      }
+    };
+
+    reader.readAsText(file);
+  };
+
+  const handleParticipantsChange = (value: string) => {
+    const lines = value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line !== "");
+
+    const updatedParticipants = lines.map((name) => {
+      const existing = participants.find((p) => p.name === name);
+      return existing || { id: uuidv4(), name };
+    });
+    setParticipants(updatedParticipants);
+    console.log("participant", participants);
+    console.log("updated participant", updatedParticipants);
+  };
+
+  const addBillInput = () => {
+    setBillInputs([...billInputs, uuidv4()]);
+  };
+
+  const removeBillInput = (id: string) => {
+    const updatedInputs = billInputs.filter((inputId) => inputId !== id);
+    setBillInputs(updatedInputs);
+
+    const updatedBills = bills.filter((bill) => bill.id !== id);
+    setBills(updatedBills);
+  };
+
+  const handleBillSubmit = (values: any) => {
+    const newBills: Bill[] = billInputs.map((id) => ({
+      id,
+      billName: values[`billName${id}`],
+      amount: values[`amount${id}`],
+      paidBy: values[`paidBy${id}`],
+      sharedBy: values[`sharedBy${id}`],
+    }));
+    const { results, balances } = calculateResults(participants, newBills);
+    const calculatedPayments = calculatePayments(balances);
+    setBills(newBills);
+    setResults(results);
+    const mappedPayments = mapPaymentDetails(calculatedPayments, participants);
+    setPayments(mappedPayments);
+    setIsCalculated(true);
+  };
+
+  const shareSession = async () => {
+    if (
+      participants &&
+      bills &&
+      participants.length !== 0 &&
+      bills.length !== 0
+    ) {
+      try {
+        const sessionData = {
+          participant: participants,
+          bills: bills,
+          createDate: new Date().toISOString(),
+        };
+
+        const sessionId = await firebaseService.postSessionData(sessionData);
+
+        const sessionUrl = `${window.location.origin}/bill-splitter?sessionId=${sessionId}`;
+        setSessionLink(sessionUrl);
+      } catch (error) {
+        notification.error({
+          message: "Error",
+          description: "Failed to share session data.",
+        });
+      }
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (sessionLink) {
+      navigator.clipboard.writeText(sessionLink);
+      notification.success({
+        message: "Đã sao chép liên kết!",
+      });
+    }
+  };
+
+  const downloadSessionData = () => {
+    const dataStr = JSON.stringify(
+      {
+        participant: participants,
+        bills: bills,
+        createDate: new Date().toISOString(),
+      },
+      null,
+      2
+    );
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `session-${new Date().toISOString()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    URL.revokeObjectURL(url);
+  };
   const resetAll = () => {
     setParticipants(initialParticipants);
     setBills(initialBills);
     setResults(initialResults);
     setPayments(initialPayments);
     setBillInputs(initialBillInputs);
+    setSessionLink(null);
+    setIsCalculated(false);
     form.resetFields();
     participantForm.resetFields();
   };
-  const columns: ColumnsType<Result> = [
-    { title: "Tên", dataIndex: "name", key: "name" },
-    {
-      title: "Số tiền cần trả (+) / nhận lại (-)",
-      dataIndex: "balance",
-      key: "balance",
-      render: (balance) => formatCurrency(balance),
-    },
-  ];
-
-  const paymentColumns: ColumnsType<PaymentDetails> = [
-    { title: "Người trả", dataIndex: "from", key: "from" },
-    { title: "Người nhận", dataIndex: "to", key: "to" },
-    {
-      title: "Số tiền",
-      dataIndex: "amount",
-      key: "amount",
-      render: (amount) => formatCurrency(amount),
-    },
-  ];
 
   const exportToImage = () => {
     const contentToExport = document.createElement("div");
 
+    contentToExport.style.width = "794px";
+    contentToExport.style.height = "1123px";
+    contentToExport.style.padding = "40px";
+    contentToExport.style.background = "#f0f0f0";
+    contentToExport.style.borderRadius = "8px";
+    contentToExport.style.boxShadow = "0 8px 16px rgba(0, 0, 0, 0.15)";
+    contentToExport.style.fontFamily = "Arial, sans-serif";
+    contentToExport.style.overflow = "hidden";
+
     contentToExport.innerHTML = `
-      <div style="padding: 40px; background: #ffffff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); margin: 20px;">
-        <div style="text-align: center; font-size: 24px; font-weight: bold; padding-bottom: 20px; color: #1890ff;">
-          Chi tiết Hóa Đơn
-          <p>Downloaded from https://thanhbinhbent.github.io/bill-splitter</p>
-        </div>
-        
-        <!-- Số tiền cần trả / nhận lại -->
-        <div style="margin-bottom: 20px;">
-          <h3 style="font-size: 20px; color: #1890ff;; margin-bottom: 10px;">Số tiền cần trả (+) / nhận lại (-)</h3>
-          <table style="border-collapse: collapse;">
+      <div style="text-align: center; font-size: 28px; font-weight: bold; margin-bottom: 20px; color: #1890ff;">
+        HÓA ĐƠN CHI TIẾT
+        <p style="font-size: 14px; margin-top: 5px; color: #888;">Downloaded from https://thanhbinhbent.github.io/bill-splitter</p>
+      </div>
+  
+      <!-- Nội dung hóa đơn -->
+      <div style="margin-top: 20px;">
+        ${
+          results?.length > 0
+            ? `
+          <h3 style="font-size: 20px; color: #1890ff;">Số tiền cần trả (+) / nhận lại (-)</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
             <thead>
               <tr>
-                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Tên</th>
-                <th style="font-size: 18px; color: #555; padding: 8px; text-align: right;">Số Tiền</th>
+                <th style="text-align: left; padding: 10px; border: 1px solid #d9d9d9;">Tên</th>
+                <th style="text-align: right; padding: 10px; border: 1px solid #d9d9d9;">Số Tiền</th>
               </tr>
             </thead>
             <tbody>
               ${results
                 .map(
                   (result) => `
-                    <tr>
-                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${
-                        result.name
-                      }</td>
-                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9; text-align: right;">${formatCurrency(
-                        result.balance
-                      )}</td>
-                    </tr>
-                  `
+                  <tr>
+                    <td style="padding: 10px; border: 1px solid #d9d9d9;">${
+                      result.name
+                    }</td>
+                    <td style="text-align: right; padding: 10px; border: 1px solid #d9d9d9;">${formatCurrency(
+                      result.balance
+                    )}</td>
+                  </tr>
+                `
                 )
                 .join("")}
             </tbody>
           </table>
-        </div>
+          `
+            : ""
+        }
   
-        <!-- Danh sách trả tiền -->
-        <div style="margin-bottom: 20px;">
-          <h3 style="font-size: 20px; color: #1890ff; margin-bottom: 10px;">Danh sách trả tiền</h3>
-          <table border-collapse: collapse;">
+        ${
+          payments?.length > 0
+            ? `
+          <h3 style="font-size: 20px; color: #1890ff;">Danh sách trả tiền</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
             <thead>
               <tr>
-                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Người trả</th>
-                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Số Tiền</th>
-                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Trả cho</th>
+                <th style="text-align: left; padding: 10px; border: 1px solid #d9d9d9;">Người trả</th>
+                <th style="text-align: right; padding: 10px; border: 1px solid #d9d9d9;">Số Tiền</th>
+                <th style="text-align: left; padding: 10px; border: 1px solid #d9d9d9;">Trả cho</th>
               </tr>
             </thead>
             <tbody>
               ${payments
                 .map(
                   (payment) => `
-                    <tr>
-                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${
-                        payment.from
-                      }</td>
-                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9; text-align: right;">${formatCurrency(
-                        payment.amount
-                      )}</td>
-                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${
-                        payment.to
-                      }</td>
-                    </tr>
-                  `
+                  <tr>
+                    <td style="padding: 10px; border: 1px solid #d9d9d9;">${
+                      payment.from
+                    }</td>
+                    <td style="text-align: right; padding: 10px; border: 1px solid #d9d9d9;">${formatCurrency(
+                      payment.amount
+                    )}</td>
+                    <td style="padding: 10px; border: 1px solid #d9d9d9;">${
+                      payment.to
+                    }</td>
+                  </tr>
+                `
                 )
                 .join("")}
             </tbody>
           </table>
-        </div>
+          `
+            : ""
+        }
   
-        <!-- Hóa Đơn Chi Tiết -->
-        <div>
-          <h3 style="font-size: 20px;color: #1890ff; margin-bottom: 10px;">Hóa Đơn Chi Tiết</h3>
-          <table style=" border-collapse: collapse;">
+        ${
+          bills?.length > 0
+            ? `
+          <h3 style="font-size: 20px; color: #1890ff;">Hóa Đơn Chi Tiết</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
             <thead>
               <tr>
-                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Tên hóa đơn</th>
-                <th style="font-size: 18px; color: #555; padding: 8px; text-align: right;">Số tiền</th>
-                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Người thanh toán trước</th>
-                <th style="font-size: 18px; color: #555; padding: 8px; text-align: left;">Người tham gia chia hoá đơn</th>
+                <th style="text-align: left; padding: 10px; border: 1px solid #d9d9d9;">Tên hóa đơn</th>
+                <th style="text-align: right; padding: 10px; border: 1px solid #d9d9d9;">Số tiền</th>
+                <th style="text-align: left; padding: 10px; border: 1px solid #d9d9d9;">Người thanh toán</th>
+                <th style="text-align: left; padding: 10px; border: 1px solid #d9d9d9;">Người tham gia</th>
               </tr>
             </thead>
             <tbody>
               ${bills
                 .map(
                   (bill) => `
-                    <tr>
-                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${
-                        bill.billName ?? "Hoá đơn không tên"
-                      }</td>
-                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9; text-align: right;">${formatCurrency(
-                        bill.amount
-                      )}</td>
-                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${
-                        bill.paidBy
-                      }</td>
-                      <td style="font-size: 18px; color: #555; padding: 8px; border-top: 1px solid #d9d9d9;">${bill.sharedBy.join(
-                        ", "
-                      )}</td>
-                    </tr>
-                  `
+                  <tr>
+                    <td style="padding: 10px; border: 1px solid #d9d9d9;">${
+                      bill.billName ?? "Không tên"
+                    }</td>
+                    <td style="text-align: right; padding: 10px; border: 1px solid #d9d9d9;">${formatCurrency(
+                      bill.amount
+                    )}</td>
+                    <td style="padding: 10px; border: 1px solid #d9d9d9;">${getParticipantNameById(
+                      bill.paidBy,
+                      participants
+                    )}</td>
+                    <td style="padding: 10px; border: 1px solid #d9d9d9;">${bill.sharedBy
+                      .map((id) => getParticipantNameById(id, participants))
+                      .join(", ")}</td>
+                  </tr>
+                `
                 )
                 .join("")}
             </tbody>
           </table>
-        </div>
+          `
+            : ""
+        }
       </div>
     `;
 
     document.body.appendChild(contentToExport);
 
     html2canvas(contentToExport, {
-      allowTaint: true,
+      scale: 2,
+      width: 794,
+      height: 1123,
       useCORS: true,
     })
       .then((canvas) => {
         const link = document.createElement("a");
         link.href = canvas.toDataURL("image/png");
         link.download = "ChiTietHoaDon.png";
-
         link.click();
       })
       .catch((error) => {
         console.error("Lỗi khi xuất sang hình ảnh:", error);
-        alert("Đã xảy ra lỗi khi xuất hình ảnh. Vui lòng thử lại.");
       })
       .finally(() => {
         document.body.removeChild(contentToExport);
       });
   };
-  const screens = Grid.useBreakpoint(); // Ant Design breakpoint hook
 
-  // Dynamically set padding based on screen size
+  const screens = Grid.useBreakpoint();
+
   const getPadding = () => {
-    if (screens.xs) return "20px"; // Mobile devices
-    if (screens.sm) return "60px"; // Tablets
-    if (screens.md) return "100px"; // Desktop
-    return "10px"; // Default fallback
+    if (screens.xs) return "20px";
+    if (screens.sm) return "60px";
+    if (screens.md) return "100px";
+    return "10px";
   };
   return (
     <Row
       style={{
-        padding: getPadding(), // Apply dynamic padding
+        padding: getPadding(),
         paddingTop: "40px",
         width: "100%",
       }}
@@ -435,41 +499,48 @@ const BillSplitter: React.FC = () => {
           }}
         >
           <div>
-            {" "}
-            <Button
-              type="default"
-              onClick={() =>
-                document.getElementById("importFileInput")?.click()
-              }
+            <Tooltip
+              placement="bottom"
+              title={"Khôi phục dữ liệu qua file JSON"}
             >
-              <img
-                width={15}
-                src="https://upload.wikimedia.org/wikipedia/commons/3/34/Microsoft_Office_Excel_%282019%E2%80%93present%29.svg"
-                alt="Nhập file excel/csv"
+              <Button
+                type="default"
+                onClick={() =>
+                  document.getElementById("importFileInput")?.click()
+                }
+              >
+                <img
+                  width={15}
+                  src="https://raw.githubusercontent.com/microsoft/fluentui-system-icons/refs/heads/main/assets/Folder%20Open/SVG/ic_fluent_folder_open_28_regular.svg"
+                  alt="Nhập file JSON"
+                />
+                Khôi phục
+              </Button>
+              <input
+                id="importFileInput"
+                type="file"
+                style={{ display: "none" }}
+                accept=".json"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) importFromJson(file);
+                }}
               />
-              Nhập dữ liệu
-            </Button>
-            <input
-              id="importFileInput"
-              type="file"
-              style={{ display: "none" }}
-              accept=".xlsx,.xls"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) importFromExcel(file);
-              }}
-            />
+            </Tooltip>
           </div>
 
-          <Button onClick={exportToExcel} type="default">
-            {" "}
-            <ArrowDownload48Filled width={"18px"} />
+          <Button onClick={downloadSessionData} type="default">
+            <img
+              width={15}
+              src="https://raw.githubusercontent.com/microsoft/fluentui-system-icons/refs/heads/main/assets/Arrow%20Download/SVG/ic_fluent_arrow_download_48_regular.svg"
+              alt="Sao lưu"
+            />
             Sao lưu
           </Button>
           <Button onClick={exportToImage} type="default">
             <img
               width={15}
-              src="https://img.icons8.com/?size=100&id=QdAGIsBAJMG7&format=png&color=000000"
+              src="https://raw.githubusercontent.com/microsoft/fluentui-system-icons/refs/heads/main/assets/Image/SVG/ic_fluent_image_48_regular.svg"
               alt="Xuất hình ảnh"
             />
             Xuất hình ảnh
@@ -511,7 +582,10 @@ const BillSplitter: React.FC = () => {
                         label="Tổng số tiền"
                         name={`amount${id}`}
                         rules={[
-                          { required: true, message: "Vui lòng nhập số tiền!" },
+                          {
+                            required: true,
+                            message: "Vui lòng nhập số tiền!",
+                          },
                         ]}
                       >
                         <InputNumber<number>
@@ -533,7 +607,10 @@ const BillSplitter: React.FC = () => {
                         label="Người thanh toán"
                         name={`paidBy${id}`}
                         rules={[
-                          { required: true, message: "Chọn người thanh toán!" },
+                          {
+                            required: true,
+                            message: "Chọn người thanh toán!",
+                          },
                         ]}
                       >
                         <Select
@@ -541,9 +618,9 @@ const BillSplitter: React.FC = () => {
                           style={{ width: "100%" }}
                           notFoundContent="Chưa có dữ liệu!"
                         >
-                          {participants.map((name) => (
-                            <Option key={name} value={name}>
-                              {name}
+                          {participants.map((participant) => (
+                            <Option key={participant.id} value={participant.id}>
+                              {participant.name}
                             </Option>
                           ))}
                         </Select>
@@ -555,7 +632,10 @@ const BillSplitter: React.FC = () => {
                         name={`sharedBy${id}`}
                         style={{ flex: 1 }}
                         rules={[
-                          { required: true, message: "Chọn người cùng chia!" },
+                          {
+                            required: true,
+                            message: "Chọn người cùng chia!",
+                          },
                         ]}
                       >
                         <Select
@@ -564,9 +644,9 @@ const BillSplitter: React.FC = () => {
                           style={{ width: "100%" }}
                           notFoundContent="Chưa có dữ liệu!"
                         >
-                          {participants.map((name) => (
-                            <Option key={name} value={name}>
-                              {name}
+                          {participants.map((participant) => (
+                            <Option key={participant.id} value={participant.id}>
+                              {participant.name}
                             </Option>
                           ))}
                         </Select>
@@ -603,6 +683,38 @@ const BillSplitter: React.FC = () => {
                 >
                   Tính mới
                 </Button>
+                {isCalculated && !sessionLink && (
+                  <Button
+                    onClick={shareSession}
+                    style={{ marginBottom: "10px", marginLeft: "10px" }}
+                  >
+                    Chia sẻ
+                  </Button>
+                )}
+              </div>
+              <div>
+                {sessionLink && (
+                  <div style={{ marginLeft: "10px" }}>
+                    <span
+                      style={{ cursor: "pointer" }}
+                      onClick={handleCopyLink}
+                    >
+                      <img
+                        src="https://raw.githubusercontent.com/microsoft/fluentui-system-icons/refs/heads/main/assets/Copy/SVG/ic_fluent_copy_32_regular.svg"
+                        alt=""
+                        width={20}
+                      />{" "}
+                      Sao chép liên kết{" "}
+                    </span>
+                    <a
+                      href={sessionLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {sessionLink}
+                    </a>
+                  </div>
+                )}
               </div>
             </Form>
           </Col>
