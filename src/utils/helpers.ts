@@ -99,3 +99,20 @@ export const getParticipantNameById = (
   const participant = participantList.find((p: Participant) => p.id === id);
   return participant ? participant.name : "Tên không xác định";
 };
+
+export function convertToUserFriendlyDate(isoDate: string): string {
+  const date = new Date(isoDate);
+
+  const options: Intl.DateTimeFormatOptions = {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: true, // For 12-hour format with AM/PM
+  };
+
+  return date.toLocaleString("vi-VN", options);
+}

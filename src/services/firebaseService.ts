@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, get } from "firebase/database";
 import { v4 as uuidv4 } from "uuid";
+import { nanoid } from "nanoid";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -55,14 +56,26 @@ class FirebaseService {
   }
 
   async postSessionData(session: Session): Promise<string> {
-    const sessionId = uuidv4();
+    let sessionId: string;
+
     try {
+      do {
+        // Generate a new sessionId
+        sessionId = `BINH-${nanoid(10)}`;
+
+        // Check if the sessionId exists
+        const snapshot = await get(ref(this.db, `/sessions/${sessionId}`));
+        if (!snapshot.exists()) {
+          break; // Exit loop if the sessionId is unique
+        }
+      } while (true);
+
+      // Post the session data with the unique sessionId
       await set(ref(this.db, `/sessions/${sessionId}`), {
         ...session,
         createDate: new Date().toISOString(),
       });
 
-      console.log(`Session created successfully with ID: ${sessionId}`);
       return sessionId;
     } catch (error) {
       console.error("Error posting session data: ", error);

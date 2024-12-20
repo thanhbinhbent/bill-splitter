@@ -21,10 +21,11 @@ import {
   calculateResults,
   calculatePayments,
   mapPaymentDetails,
+  convertToUserFriendlyDate,
 } from "./utils/helpers";
 
 const { Search } = Input;
-const { Title } = Typography;
+const { Title, Text, Link } = Typography;
 
 const SessionSearch: React.FC = () => {
   const [sessionId, setSessionId] = useState<string>("");
@@ -137,7 +138,7 @@ const SessionSearch: React.FC = () => {
 
   return (
     <Flex vertical align="center" style={{ paddingTop: "28px" }}>
-      <h2>Tìm kiếm hoá đơn đã tính</h2>
+      <h2>Tìm kiếm hoá đơn</h2>
       <Form
         onFinish={() => handleSearch(sessionId)}
         layout="inline"
@@ -161,7 +162,20 @@ const SessionSearch: React.FC = () => {
           <Card
             style={{ textWrap: "wrap" }}
             title={
-              <span style={{ textWrap: "wrap" }}>Session ID: {sessionId}</span>
+              <Flex vertical>
+                <Text
+                  style={{ textWrap: "wrap", fontWeight: "bold" }}
+                  ellipsis={true}
+                >
+                  Session ID: <Link> {sessionId}</Link>
+                </Text>
+                <Text style={{ textWrap: "wrap" }}>
+                  Được chia sẻ{" "}
+                  <Text>
+                    {convertToUserFriendlyDate(sessionData.createDate)}
+                  </Text>
+                </Text>
+              </Flex>
             }
             bordered={false}
           >
