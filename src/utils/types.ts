@@ -1,5 +1,11 @@
 import { ColumnsType } from "antd/es/table";
 
+export interface Session {
+  bills: Bill[];
+  createDate: string;
+  participant: Participant[];
+}
+
 // Participant
 export interface Participant {
   id: string;

@@ -1,37 +1,16 @@
 import React, { useState, useEffect } from "react";
-import {
-  Input,
-  Form,
-  notification,
-  Card,
-  Table,
-  Typography,
-  Flex,
-  Alert,
-} from "antd";
+import { Input, Form, notification, Card, Typography, Flex, Alert } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import { firebaseService, Session } from "./services/firebaseService";
-import {
-  resultColumns,
-  paymentColumns,
-  Bill,
-  Participant,
-} from "./utils/types";
-import {
-  calculateResults,
-  calculatePayments,
-  mapPaymentDetails,
-  convertToUserFriendlyDate,
-} from "./utils/helpers";
+import { convertToUserFriendlyDate } from "./utils/helpers";
+import SessionTables from "./SessionTables";
 
 const { Search } = Input;
-const { Title, Text, Link } = Typography;
+const { Text, Link } = Typography;
 
 const SessionSearch: React.FC = () => {
   const [sessionId, setSessionId] = useState<string>("");
   const [sessionData, setSessionData] = useState<Session | null>(null);
-  const [results, setResults] = useState<any[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
 
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
@@ -50,26 +29,6 @@ const SessionSearch: React.FC = () => {
       const session = await firebaseService.getSessionData(id);
       if (session) {
         setSessionData(session);
-
-        const { results: calculatedResults, balances } = calculateResults(
-          session.participant,
-          session.bills
-        );
-        const calculatedPayments = calculatePayments(balances);
-        const mappedPayments = mapPaymentDetails(
-          calculatedPayments,
-          session.participant
-        );
-
-        setResults(calculatedResults);
-        setPayments(mappedPayments);
-
-        if (showNotification) {
-          notification.success({
-            message: "Đã tìm thấy hoá đơn",
-            description: `Session ID: ${id} đã tìm thấy thành công.`,
-          });
-        }
       } else {
         setSessionData(null);
         if (showNotification) {
@@ -101,40 +60,6 @@ const SessionSearch: React.FC = () => {
       });
     }
   };
-
-  const mapBillsData = (bills: Bill[], participants: Participant[]) =>
-    bills.map((bill) => ({
-      ...bill,
-      paidBy:
-        participants.find((p) => p.id === bill.paidBy)?.name || bill.paidBy,
-      sharedBy: bill.sharedBy
-        .map((id) => participants.find((p) => p.id === id)?.name || id)
-        .join(", "),
-    }));
-
-  const billColumns = [
-    { title: "Tên hoá đơn", dataIndex: "billName", key: "billName" },
-    {
-      title: "Số tiền đã thanh toán",
-      dataIndex: "amount",
-      key: "amount",
-      render: (amount: number) =>
-        new Intl.NumberFormat("vi-VN", {
-          style: "currency",
-          currency: "VND",
-        }).format(amount),
-    },
-    {
-      title: "Được thanh toán trước bởi",
-      dataIndex: "paidBy",
-      key: "paidBy",
-    },
-    {
-      title: "Danh sách người chia",
-      dataIndex: "sharedBy",
-      key: "sharedBy",
-    },
-  ];
 
   return (
     <Flex vertical align="center" style={{ paddingTop: "28px" }}>
@@ -179,36 +104,7 @@ const SessionSearch: React.FC = () => {
             }
             bordered={false}
           >
-            <Title level={4}>Tóm tắt số dư</Title>
-            <Table
-              columns={resultColumns}
-              dataSource={results}
-              pagination={false}
-              rowKey="name"
-            />
-
-            <Title level={4} style={{ marginTop: 20 }}>
-              Chi tiết cần thanh toán
-            </Title>
-            <Table
-              columns={paymentColumns}
-              dataSource={payments}
-              pagination={false}
-              rowKey="from"
-            />
-
-            <Title level={4} style={{ marginTop: 20 }}>
-              Lịch sử hoá đơn
-            </Title>
-            <Table
-              columns={billColumns}
-              dataSource={mapBillsData(
-                sessionData.bills,
-                sessionData.participant
-              )}
-              pagination={false}
-              rowKey="id"
-            />
+            <SessionTables sessionData={sessionData} />
           </Card>
         </div>
       ) : (

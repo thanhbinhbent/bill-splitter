@@ -5,7 +5,6 @@ import {
   Input,
   Form,
   Button,
-  Tooltip,
   Table,
   Select,
   Grid,
@@ -13,7 +12,9 @@ import {
   Divider,
   Row,
   Col,
+  Dropdown,
   notification,
+  Modal,
 } from "antd";
 import { v4 as uuidv4 } from "uuid";
 import "antd/dist/reset.css";
@@ -26,6 +27,7 @@ import {
   resultColumns,
   Bill,
   PaymentDetails,
+  Session,
 } from "./utils/types";
 import {
   calculateResults,
@@ -35,6 +37,9 @@ import {
   getParticipantNameById,
 } from "./utils/helpers";
 import { firebaseService } from "./services/firebaseService";
+import ImportByIdModal from "./ImportByIdModal";
+import { useSessionSearchStore } from "./states/useSessionSearchStore";
+
 const { TextArea } = Input;
 const { Option } = Select;
 
@@ -45,6 +50,9 @@ const BillSplitter: React.FC = () => {
   const initialPayments: PaymentDetails[] = [];
   const initialBillInputs: string[] = [uuidv4()];
 
+  // Zustand state
+  const { setSession, setSessionId } = useSessionSearchStore((state) => state);
+
   const [sessionLink, setSessionLink] = useState<string | null>(null);
   const [isCalculated, setIsCalculated] = useState(false);
 
@@ -53,6 +61,7 @@ const BillSplitter: React.FC = () => {
   const [results, setResults] = useState<Result[]>([]);
   const [payments, setPayments] = useState<PaymentDetails[]>([]);
   const [billInputs, setBillInputs] = useState<string[]>([uuidv4()]);
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
 
   const [form] = Form.useForm();
   const [participantForm] = Form.useForm();
@@ -60,6 +69,94 @@ const BillSplitter: React.FC = () => {
   const columns: ColumnsType<Result> = resultColumns;
 
   const paymentColumns: ColumnsType<PaymentDetails> = paymentColumnsHelper;
+
+  const handleCancelImportByModal = () => {
+    console.log("Closing Modal");
+    setIsImportModalOpen(false); // Close the modal when cancel is clicked
+  };
+
+  const showImportByIdModal = () => {
+    console.log("Opening Modal");
+    setIsImportModalOpen(true); // Open the modal
+  };
+
+  const importMenu = [
+    {
+      key: "import-by-json",
+      label: (
+        <a onClick={() => document.getElementById("importFileInput")?.click()}>
+          Qua file JSON
+          <input
+            id="importFileInput"
+            type="file"
+            style={{ display: "none" }}
+            accept=".json"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) importFromJson(file);
+            }}
+          />
+        </a>
+      ),
+    },
+    {
+      key: "import-by-extist-id",
+      label: <a onClick={showImportByIdModal}>Qua Session ID</a>,
+    },
+  ];
+
+  const importFromDatabase = (session: Session) => {
+    setIsImportModalOpen(false);
+    if (session) {
+      const importedParticipants = session.participant.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+      }));
+      setParticipants(importedParticipants);
+
+      const importedBills = session.bills.map((bill: any) => ({
+        id: bill.id,
+        billName: bill.billName,
+        amount: bill.amount,
+        paidBy: bill.paidBy,
+        sharedBy: bill.sharedBy || [],
+      }));
+      setBills(importedBills);
+
+      // Calculate results (replace with your own calculation logic)
+      const { results, balances } = calculateResults(
+        importedParticipants,
+        importedBills
+      );
+      setResults(results);
+
+      // Set up participant list to display
+      participantForm.setFieldsValue({
+        participantList: importedParticipants
+          .map((p: Participant) => p.name)
+          .join("\n"),
+      });
+
+      // Update bill form fields (assuming `form` is available and set up)
+      importedBills.forEach((bill: Bill) => {
+        form.setFieldsValue({
+          [`billName${bill.id}`]: bill.billName,
+          [`amount${bill.id}`]: bill.amount,
+          [`paidBy${bill.id}`]: bill.paidBy,
+          [`sharedBy${bill.id}`]: bill.sharedBy,
+        });
+      });
+
+      // Optional: You may also want to handle billInputs if necessary
+      setBillInputs(importedBills.map((bill: Bill) => bill.id));
+      setPayments(
+        mapPaymentDetails(calculatePayments(balances), importedParticipants)
+      );
+      setSession(null), setSessionId("");
+      setSessionLink("");
+      setIsCalculated(false);
+    }
+  };
 
   const importFromJson = (file: File) => {
     const reader = new FileReader();
@@ -438,16 +535,8 @@ const BillSplitter: React.FC = () => {
           }}
         >
           <div>
-            <Tooltip
-              placement="bottom"
-              title={"Khôi phục dữ liệu qua file JSON"}
-            >
-              <Button
-                type="default"
-                onClick={() =>
-                  document.getElementById("importFileInput")?.click()
-                }
-              >
+            <Dropdown menu={{ items: importMenu }} placement="bottom">
+              <Button type="default">
                 <img
                   width={15}
                   src="https://raw.githubusercontent.com/microsoft/fluentui-system-icons/refs/heads/main/assets/Folder%20Open/SVG/ic_fluent_folder_open_28_regular.svg"
@@ -455,17 +544,17 @@ const BillSplitter: React.FC = () => {
                 />
                 Khôi phục
               </Button>
-              <input
-                id="importFileInput"
-                type="file"
-                style={{ display: "none" }}
-                accept=".json"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) importFromJson(file);
-                }}
-              />
-            </Tooltip>
+            </Dropdown>
+
+            <Modal
+              title="Nhập dữ liệu đã lưu trên hệ thống"
+              height={"auto"}
+              footer={false}
+              open={isImportModalOpen}
+              onCancel={handleCancelImportByModal}
+            >
+              <ImportByIdModal importFromDatabase={importFromDatabase} />
+            </Modal>
           </div>
 
           <Button onClick={downloadSessionData} type="default">
@@ -660,7 +749,7 @@ const BillSplitter: React.FC = () => {
         </Row>
         {/* Kết quả */}
         <div style={{ marginTop: "20px" }} id="summaryContent">
-          <h3 style={{ marginTop: "20px" }}>Tóm tắt:</h3>
+          <h2 style={{ marginTop: "20px" }}>Tóm tắt số dư:</h2>
           <Table
             dataSource={results}
             columns={columns}
@@ -668,7 +757,7 @@ const BillSplitter: React.FC = () => {
             locale={{ emptyText: "Chưa có dữ liệu" }}
             pagination={false}
           />
-          <h3 style={{ marginTop: "20px" }}>Ai cần trả cho ai bao nhiêu:</h3>
+          <h2 style={{ marginTop: "20px" }}>Chi tiết cần thanh toán:</h2>
           <Table
             dataSource={payments}
             columns={paymentColumns}

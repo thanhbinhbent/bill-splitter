@@ -1,5 +1,12 @@
 import { v4 as uuidv4 } from "uuid";
-import { Participant, Bill, Result, PaymentDetails, Balances } from "./types";
+import {
+  Participant,
+  Bill,
+  Result,
+  PaymentDetails,
+  Balances,
+  Session,
+} from "./types";
 
 // Format a number as currency
 export const formatCurrency = (value: number): string =>
@@ -76,7 +83,6 @@ export const calculatePayments = (balances: Balances): PaymentDetails[] => {
   return paymentDetails;
 };
 
-// Map payment details to participant names
 export const mapPaymentDetails = (
   payments: PaymentDetails[],
   participants: Participant[]
@@ -87,8 +93,8 @@ export const mapPaymentDetails = (
 
   return payments.map((payment) => ({
     ...payment,
-    from: participantMap.get(payment.from) || payment.from,
-    to: participantMap.get(payment.to) || payment.to,
+    from: participantMap.get(payment.from) || payment.from, // Map from ID to name
+    to: participantMap.get(payment.to) || payment.to, // Map to ID to name
   }));
 };
 
@@ -116,3 +122,21 @@ export function convertToUserFriendlyDate(isoDate: string): string {
 
   return date.toLocaleString("vi-VN", options);
 }
+
+export const getCalculatedResults = (session: Session): Result[] => {
+  const { participant, bills } = session;
+
+  const { results } = calculateResults(participant, bills);
+
+  return results;
+};
+
+export const getCalculatedPayments = (session: Session): PaymentDetails[] => {
+  const { participant, bills } = session;
+
+  const { balances } = calculateResults(participant, bills);
+
+  const payments = calculatePayments(balances);
+
+  return mapPaymentDetails(payments, participant);
+};

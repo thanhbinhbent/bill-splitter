@@ -1,6 +1,5 @@
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, get } from "firebase/database";
-import { v4 as uuidv4 } from "uuid";
 import { nanoid } from "nanoid";
 
 const firebaseConfig = {
