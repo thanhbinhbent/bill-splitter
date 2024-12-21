@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Input,
+  Flex,
   Form,
   Button,
   Table,
@@ -39,6 +40,7 @@ import {
 import { firebaseService } from "./services/firebaseService";
 import ImportByIdModal from "./ImportByIdModal";
 import { useSessionSearchStore } from "./states/useSessionSearchStore";
+import Logo from "./Logo";
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -54,7 +56,11 @@ const BillSplitter: React.FC = () => {
   const { setSession, setSessionId } = useSessionSearchStore((state) => state);
 
   const [sessionLink, setSessionLink] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
+
   const [isCalculated, setIsCalculated] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
@@ -84,16 +90,26 @@ const BillSplitter: React.FC = () => {
     {
       key: "import-by-json",
       label: (
-        <a onClick={() => document.getElementById("importFileInput")?.click()}>
+        <a
+          onClick={() => {
+            if (fileInputRef.current) {
+              fileInputRef.current.value = "";
+              fileInputRef.current.click();
+            }
+          }}
+        >
           Qua file JSON
           <input
             id="importFileInput"
+            ref={fileInputRef}
             type="file"
             style={{ display: "none" }}
             accept=".json"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) importFromJson(file);
+              if (file) {
+                importFromJson(file);
+              }
             }}
           />
         </a>
@@ -278,10 +294,12 @@ const BillSplitter: React.FC = () => {
           bills: bills,
           createDate: new Date().toISOString(),
         };
+        setIsSharing(true);
 
         const sessionId = await firebaseService.postSessionData(sessionData);
 
         const sessionUrl = `${window.location.origin}/bill-splitter?sessionId=${sessionId}`;
+        setIsSharing(false);
         setSessionLink(sessionUrl);
       } catch (error) {
         notification.error({
@@ -509,8 +527,10 @@ const BillSplitter: React.FC = () => {
           width: "100%",
         }}
       >
-        {" "}
-        <h1 style={{ textAlign: "center" }}>
+        <Flex vertical align="center">
+          <Logo width={250} />
+        </Flex>
+        <h1 style={{ textAlign: "center", marginTop: "20px" }}>
           Công Cụ Chia Tiền Hóa Đơn
           <a
             href="https://github.com/thanhbinhbent/bill-splitter"
@@ -572,6 +592,13 @@ const BillSplitter: React.FC = () => {
               alt="Xuất hình ảnh"
             />
             Xuất hình ảnh
+          </Button>
+          <Button onClick={exportToImage} href="?sessionId" type="link">
+            <img
+              width={18}
+              src="https://raw.githubusercontent.com/microsoft/fluentui-system-icons/refs/heads/main/assets/Search/SVG/ic_fluent_search_48_regular.svg"
+              alt="Tìm kiếm"
+            />
           </Button>
         </div>
         <Divider />
@@ -713,6 +740,8 @@ const BillSplitter: React.FC = () => {
                 </Button>
                 {isCalculated && !sessionLink && (
                   <Button
+                    loading={isSharing}
+                    disabled={isSharing}
                     onClick={shareSession}
                     style={{ marginBottom: "10px", marginLeft: "10px" }}
                   >

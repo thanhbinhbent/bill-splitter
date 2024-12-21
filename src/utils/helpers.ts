@@ -8,30 +8,25 @@ import {
   Session,
 } from "./types";
 
-// Format a number as currency
 export const formatCurrency = (value: number): string =>
   new Intl.NumberFormat("vi-VN", {
     style: "currency",
     currency: "VND",
   }).format(value);
 
-// Generate unique IDs for bills
 export const generateUniqueIds = (count: number): string[] =>
   Array.from({ length: count }, () => uuidv4());
 
-// Calculate results based on participants and bills
 export const calculateResults = (
   participants: Participant[],
   bills: Bill[]
 ): { results: Result[]; balances: Balances } => {
   const balances: Balances = {};
 
-  // Initialize balances with participant IDs
   participants.forEach((participant) => {
     balances[participant.id] = 0;
   });
 
-  // Calculate balances
   bills.forEach((bill) => {
     if (bill.sharedBy && bill.sharedBy.length > 0) {
       const share = bill.amount / bill.sharedBy.length;
@@ -42,7 +37,6 @@ export const calculateResults = (
     }
   });
 
-  // Prepare result array
   const results: Result[] = participants.map((participant) => ({
     name: participant.name,
     balance: balances[participant.id],
@@ -51,7 +45,6 @@ export const calculateResults = (
   return { results, balances };
 };
 
-// Calculate payment details based on balances
 export const calculatePayments = (balances: Balances): PaymentDetails[] => {
   const creditors = Object.entries(balances)
     .filter(([_, balance]) => balance < 0)
@@ -93,8 +86,8 @@ export const mapPaymentDetails = (
 
   return payments.map((payment) => ({
     ...payment,
-    from: participantMap.get(payment.from) || payment.from, // Map from ID to name
-    to: participantMap.get(payment.to) || payment.to, // Map to ID to name
+    from: participantMap.get(payment.from) || payment.from,
+    to: participantMap.get(payment.to) || payment.to,
   }));
 };
 

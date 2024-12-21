@@ -4,6 +4,7 @@ import { SearchOutlined } from "@ant-design/icons";
 import { firebaseService, Session } from "./services/firebaseService";
 import { convertToUserFriendlyDate } from "./utils/helpers";
 import SessionTables from "./SessionTables";
+import SVGLogoComponent from "./Logo";
 
 const { Search } = Input;
 const { Text, Link } = Typography;
@@ -11,6 +12,7 @@ const { Text, Link } = Typography;
 const SessionSearch: React.FC = () => {
   const [sessionId, setSessionId] = useState<string>("");
   const [sessionData, setSessionData] = useState<Session | null>(null);
+  const [showNoDataAlert, setShowNoDataAlert] = useState<boolean>(false); // New state for alert visibility
 
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
@@ -20,6 +22,7 @@ const SessionSearch: React.FC = () => {
       if (!sessionData) {
         setSessionId(id);
         fetchSessionData(id, false);
+        setShowNoDataAlert(true);
       }
     }
   }, [sessionData]);
@@ -28,6 +31,7 @@ const SessionSearch: React.FC = () => {
     try {
       const session = await firebaseService.getSessionData(id);
       if (session) {
+        setShowNoDataAlert(false);
         setSessionData(session);
       } else {
         setSessionData(null);
@@ -36,6 +40,7 @@ const SessionSearch: React.FC = () => {
             message: "Không tìm thấy hoá đơn",
             description: `Không có hoá đơn nào tìm thấy với Session ID: ${id}`,
           });
+          setShowNoDataAlert(true); // Show the no data alert when session data is not found
         }
       }
     } catch (error) {
@@ -49,10 +54,12 @@ const SessionSearch: React.FC = () => {
   };
 
   const handleSearch = (value: string) => {
+    setSessionId("");
     if (value) {
       const newUrl = `${window.location.pathname}?sessionId=${value}`;
       window.history.pushState({}, "", newUrl);
       fetchSessionData(value, true);
+      setSessionId(value);
     } else {
       notification.error({
         message: "Lỗi",
@@ -63,7 +70,10 @@ const SessionSearch: React.FC = () => {
 
   return (
     <Flex vertical align="center" style={{ paddingTop: "28px" }}>
-      <h2>Tìm kiếm hoá đơn</h2>
+      <Flex vertical align="center">
+        <SVGLogoComponent width={250} />
+      </Flex>
+      <h2 style={{ marginTop: "20px" }}>Tìm kiếm hoá đơn</h2>
       <Form
         onFinish={() => handleSearch(sessionId)}
         layout="inline"
@@ -76,13 +86,21 @@ const SessionSearch: React.FC = () => {
             size="middle"
             value={sessionId}
             style={{ width: 300, marginTop: 12 }}
-            onChange={(e) => setSessionId(e.target.value)}
             onSearch={handleSearch}
           />
         </Form.Item>
       </Form>
 
-      {sessionData ? (
+      {/* Check if sessionId is empty and show message */}
+      {sessionId === "" && (
+        <Alert
+          style={{ marginTop: 20 }}
+          message="Vui lòng nhập Session ID để tìm kiếm!"
+          type="warning"
+        />
+      )}
+
+      {sessionData && sessionId !== "" ? (
         <div style={{ marginTop: 40 }}>
           <Card
             style={{ textWrap: "wrap" }}
@@ -108,11 +126,14 @@ const SessionSearch: React.FC = () => {
           </Card>
         </div>
       ) : (
-        <Alert
-          style={{ marginTop: 20 }}
-          message="Không tìm thấy dữ liệu! Vui lòng tìm với Session ID khác."
-          type="warning"
-        />
+        sessionId !== "" &&
+        showNoDataAlert && (
+          <Alert
+            style={{ marginTop: 20 }}
+            message="Không tìm thấy dữ liệu! Vui lòng tìm với Session ID khác."
+            type="warning"
+          />
+        )
       )}
     </Flex>
   );

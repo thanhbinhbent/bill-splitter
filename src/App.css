@@ -1,0 +1,79 @@
+/* App.css */
+/* Apply gradient to all primary buttons */
+.ant-btn-primary {
+  background: linear-gradient(-90deg, #23aeff, #1677ff);
+  border: none;
+  color: white;
+  transition: background 0.3s ease; /* Smooth transition for gradient */
+}
+
+.ant-btn-primary:hover {
+  background: linear-gradient(90deg, #23aeff, #1677ff) !important;
+  border: none !important;
+  color: white !important;
+  transform: scale(1.03);
+}
+
+/* Apply gradient to primary buttons on active state */
+.ant-btn-primary:active {
+  color: white;
+  transform: scale(0.95);
+}
+
+/* Hover state for buttons with a custom variant */
+.ant-btn-variant:hover {
+  background: linear-gradient(90deg, #23aeff, #1677ff) !important;
+  border-color: transparent !important;
+  color: white !important;
+  box-shadow: 0 0 10px rgba(22, 119, 255, 0.5); /* Add a glow effect */
+  transform: scale(1.03); /* Scale effect on hover */
+}
+
+/* Hover state for disabled buttons */
+.ant-btn-primary:disabled {
+  background: linear-gradient(-90deg, #e0e0e0, #b0b0b0);
+  color: #ccc;
+}
+
+/* Apply gradient border to input and select elements */
+.ant-input,
+.ant-select-selector {
+  border-color: linear-gradient(-90deg, #23aeff, #1677ff);
+  transition: border-color 0.3s ease;
+}
+
+/* Hover state for input fields */
+.ant-input:hover,
+.ant-select-selector:hover {
+  border-color: linear-gradient(90deg, #23aeff, #1677ff);
+}
+
+/* Additional hover effects for other buttons, you can add more variants as needed */
+.ant-btn:hover {
+  background: linear-gradient(90deg, #23aeff, #1677ff);
+  border-color: transparent;
+  color: white;
+}
+
+/* Gradient effect for links */
+.ant-typography a,
+.ant-typography a:hover,
+.ant-typography a:active,
+a {
+  background: linear-gradient(-90deg, #23aeff, #1677ff);
+  -webkit-background-clip: text;
+  color: transparent;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.ant-typography a:hover {
+  color: linear-gradient(-90deg, #23aeff, #1677ff); /* Gradient on hover */
+}
+
+/* Hover effect for anchor tags in general */
+a:hover {
+  background: linear-gradient(90deg, #23aeff, #1677ff);
+  color: transparent;
+  -webkit-background-clip: text;
+}
